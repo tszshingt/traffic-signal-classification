@@ -2,7 +2,7 @@
 ## Traffic Signal Classification with Cost-Sensitive Deep Learning Models
 
 ### File/Folder Descriptions
-- **CAP 6619 Term Project Report_Tsoi.pdf**: Final term project report
+- **CAP 6619 Term Project Report_Tsoi.pdf**: Final term project research paper
 - **lisa_traffic_light_base.rmd**: R code for traffic signal classification with CNN base case
 - **lisa_traffic_light_cost_weight.rmd**: R code for traffic signal classification with CNN using cost-sensitive loss function
 - **lisa_traffic_light_sampling.rmd**: R code for traffic signal classification with CNN using cost-proportionate rejection sampling
