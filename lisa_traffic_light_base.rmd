@@ -1,0 +1,255 @@
+---
+title: "R Notebook"
+#output: html_notebook
+---
+
+#R Notebook, using keras to build convolutional neural networks for Image Classification. 
+
+#CAP-6619
+## Traffic signal classification with CNN base case
+```{r}
+org_train_image_dir <- "lisa_traffic_light_train"
+org_test_image_dir <- "lisa_traffic_light_test"
+newbasedir<-"lisa_traffic_light_base"
+tlclass = c('go', 'goLeft', 'stop', 'stopLeft', 'warning', 'warningLeft')
+
+tlclass_size_train = length(list.files(path=org_train_image_dir))
+tlclass_size_test = length(list.files(path=org_test_image_dir))
+tlclass_size_train.byclass = sapply(tlclass, function(x) length(list.files(path=org_train_image_dir, pattern = paste0(x,"\\."))))
+tlclass_size_test.byclass = sapply(tlclass, function(x) length(list.files(path=org_test_image_dir, pattern = paste0(x,"\\."))))
+
+paste0("Total training images: ", tlclass_size_train, ", total by class: ", sum(tlclass_size_train.byclass))
+tlclass_size_train.byclass
+paste0("Total testing images: ", tlclass_size_test, ", total by class: ", sum(tlclass_size_test.byclass))
+tlclass_size_test.byclass
+
+dir.create(newbasedir)
+
+train_dir <- file.path(newbasedir, "train")
+dir.create(train_dir)
+
+validation_dir <- file.path(newbasedir, "validation")
+dir.create(validation_dir)
+
+test_dir <- file.path(newbasedir, "test")
+dir.create(test_dir)
+
+train_tlclass_dir <- sapply(tlclass,function(x) file.path(train_dir,x))
+sapply(train_tlclass_dir,dir.create)
+
+validation_tlclass_dir <- sapply(tlclass,function(x) file.path(validation_dir,x))
+sapply(validation_tlclass_dir,dir.create)
+
+test_tlclass_dir <- sapply(tlclass,function(x) file.path(test_dir,x))
+sapply(test_tlclass_dir,dir.create)
+```
+
+```{r}
+set.seed(0)
+train_percent <- 0.80
+#validation_percent <- 0.20
+#test_percent <- 0.05
+for (i in 1:length(tlclass)){
+  train.allIndex = 1:tlclass_size_train.byclass[i]
+  train.index <- sample(train.allIndex, tlclass_size_train.byclass[i] * train_percent, replace = FALSE)
+  validation.index <- train.allIndex[-train.index]
+  
+  fnames <- paste0(tlclass[i], ".", train.index, ".jpg")
+  file.copy(file.path(org_train_image_dir, fnames), 
+          file.path(train_tlclass_dir[i])) 
+  
+  fnames <- paste0(tlclass[i], ".", validation.index, ".jpg")
+  file.copy(file.path(org_train_image_dir, fnames), 
+          file.path(validation_tlclass_dir[i])) 
+  
+  test.allIndex = 1:tlclass_size_test.byclass[i]
+  test.index <- test.allIndex
+  fnames <- paste0(tlclass[i], ".", test.index, ".jpg")
+  file.copy(file.path(org_test_image_dir, fnames), 
+          file.path(test_tlclass_dir[i])) 
+}
+```
+
+```{r}
+train_image_num = length(list.files(path=train_dir, recursive = TRUE))
+validation_image_num = length(list.files(path=validation_dir, recursive = TRUE))
+test_image_num = length(list.files(path=test_dir, recursive = TRUE))
+paste0("Number of training images: ", train_image_num, " , number of validation images: ", validation_image_num,
+       " , number of test images: ", test_image_num)
+```
+
+```{r}
+# library("jpeg")
+# 
+# fnames <- paste0(train_cats_dir,"/","cat.", 1, ".jpg")
+# jj <- readJPEG(fnames,native=TRUE)
+# plot(0:1,0:1,type="n",ann=FALSE,axes=FALSE)
+# rasterImage(jj,0,0,1,1)
+# 
+# ```
+# ```{r}
+# cats_names <- paste0(train_cats_dir,"/","cat.", 1:3, ".jpg")
+# dogs_names <- paste0(train_dogs_dir,"/","dog.", 1:3, ".jpg")
+# cats_and_dogs<-c(cats_names,dogs_names)
+# 
+# showonejpeg<-function(file_name)
+# {
+#   f_jpg<-readJPEG(file_name,native=TRUE)
+#   plot(0:1,0:1,type="n",ann=FALSE,axes=FALSE)
+#   rasterImage(f_jpg,0,0,1,1)
+# }
+# 
+# lapply(cats_and_dogs,showonejpeg)
+```
+
+
+```{r}
+set.seed(0)
+library(keras)
+network <- keras_model_sequential() %>%
+    layer_conv_2d(filters = 32, kernel_size = c(7, 7), activation = "relu",
+    input_shape = c(48, 48, 3)) %>%
+    layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+    layer_conv_2d(filters = 64, kernel_size = c(3, 3), activation = "relu") %>%
+    layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+    layer_conv_2d(filters = 128, kernel_size = c(3, 3), activation = "relu") %>%
+    layer_flatten() %>%
+    layer_dense(units = 256, activation = "relu") %>%
+    layer_dropout(0.5) %>%
+    layer_dense(units = 128, activation = "relu") %>%
+    layer_dropout(0.5) %>%
+    layer_dense(units = 6, activation = "softmax")
+summary(network)
+```
+
+```{r}
+# network %>% compile(
+#     loss = "categorical_crossentropy",
+#     optimizer = optimizer_sgd(lr = 1e-4, momentum = 0.6, nesterov = TRUE),
+#    #optimizer = optimizer_rmsprop(lr = 1e-4),
+#     metrics = c("acc")
+# )
+# summary(network)
+```
+
+# a generator to generate image distortion so we can have a variety of training images in different orientaions, shapes, sizes etc.
+```{r}
+datagen <- image_data_generator(
+  rescale = 1/255,
+  rotation_range = 5,
+  width_shift_range = 0.1,
+  height_shift_range = 0.05,
+  #shear_range = 0.2,
+  brightness_range = list(0.5, 2),
+  zoom_range = 0.2,
+  horizontal_flip = TRUE,
+  fill_mode = "nearest"
+)
+
+```
+
+```{r}
+#train_datagen <- image_data_generator(rescale = 1/255)
+#validation_datagen <- image_data_generator(rescale = 1/255)
+batchSize = 25
+train_generator <- flow_images_from_directory(
+    train_dir,
+    datagen,
+    target_size = c(48, 48),
+    batch_size = batchSize,
+    class_mode = "categorical",
+    #save_to_dir='aug',
+    #save_prefix='aug',
+    #save_format='jpg'
+  )
+#batch <- generator_next(train_generator)
+#str(batch)
+```
+
+```{r}
+validation_generator <- flow_images_from_directory(
+    validation_dir,
+    datagen,
+    target_size = c(48, 48),
+    batch_size = batchSize,
+    class_mode = "categorical"
+)
+#batch <- generator_next(validation_generator)
+#str(batch)
+```
+
+```{r}
+initial_lrate = 0.001
+min_lrate = 1e-5
+
+network %>% compile(
+    loss = "categorical_crossentropy",
+    optimizer = optimizer_sgd(lr = initial_lrate, momentum = 0.6, nesterov = TRUE),
+   #optimizer = optimizer_rmsprop(lr = 1e-4),
+    metrics = c("acc")
+)
+
+schedule <- function(epoch, current_lrate){
+  drop_rate = 0.5
+  lrate = current_lrate
+  if (epoch > 0 && epoch %% 10 == 0){
+    lrate = current_lrate * drop_rate
+  }
+  if (lrate < min_lrate){
+    lrate = min_lrate
+  }
+  return (lrate)
+}
+
+lr_schedule = callback_learning_rate_scheduler(schedule)
+
+
+
+if (file.exists("lisa_TL_train_base.hdf5")){
+  network <- load_model_hdf5("lisa_TL_train_base.hdf5")
+}
+epochsNum = 40
+
+# define the checkpoint
+filename = "lisa_TL_train_base_CP.{epoch:02d}-{loss:.2f}.hdf5"
+checkpoint = callback_model_checkpoint(filename, monitor='loss', verbose=1, save_best_only=TRUE, mode='min')
+
+network <- load_model_hdf5("lisa_TL_train_base_CP.38-0.15.hdf5")
+
+# train model
+history <- network %>% fit_generator(
+    train_generator,
+    steps_per_epoch = as.integer(train_generator$n/batchSize),
+    epochs = epochsNum,
+    #validation_data = validation_generator,
+    #validation_steps = as.integer(validation_generator$n/batchSize),
+    callbacks = list(checkpoint,lr_schedule),
+    initial_epoch = 38
+)
+
+# now save CNN models
+plot(history)
+network %>% save_model_hdf5("lisa_TL_train_base.hdf5")
+```
+
+```{r}
+  network <- load_model_hdf5("lisa_TL_train_base.hdf5")
+batch_size_test = 12
+test_datagen <- image_data_generator(rescale = 1/255)
+test_generator <- flow_images_from_directory(
+  test_dir,
+  test_datagen,
+  target_size = c(48, 48),
+  batch_size = batch_size_test,
+  class_mode = "categorical",
+  shuffle = FALSE
+)
+
+#results.eval <- evaluate_generator(network, test_generator, steps = test_generator$n%/%batch_size_test)
+results.prob <- predict_generator(network, test_generator, steps = test_generator$n%/%batch_size_test)
+results.predlabel <- apply(results.prob,1,which.max) - 1
+table(results.predlabel, test_generator$labels)
+
+save.image(file = "lisa_traffic_light_base.dataVariables.RData")
+#results.eval
+```
